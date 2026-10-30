@@ -1,0 +1,48 @@
+# Python environments and generated files
+.venv311/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+
+# Downloaded/training datasets
+dataset/*
+!dataset/.gitkeep
+
+# Node.js dependencies and logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build and temporary output
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.log
+dist/
+build/
+
+# IDE and operating-system files
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
