@@ -98,6 +98,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastCommandAt = 0;
     let esp32BaseUrl = null;
 
+    function resetStabilityState() {
+        currentCandidateClass = null;
+        stabilityStreak = 0;
+        lastDispatchedClass = null;
+        stabilityText.textContent = `0 / ${REQUIRED_CONSECUTIVE_FRAMES} Frames`;
+        pips.forEach(pip => {
+            pip.classList.remove('active');
+            pip.style.backgroundColor = '';
+        });
+    }
+
     // Mobile Navigation Toggle
     if (mobileToggle && navLinks) {
         mobileToggle.addEventListener('click', () => {
@@ -392,6 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         video.srcObject = null;
+        resetStabilityState();
         setCameraStatus('OFF');
     }
 
@@ -404,21 +416,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         isClassifying = true;
+        try {
+            // Draw current video frame to hidden canvas
+            const w = video.videoWidth || 640;
+            const h = video.videoHeight || 480;
+            captureCanvas.width = w;
+            captureCanvas.height = h;
 
-        // Draw current video frame to hidden canvas
-        const w = video.videoWidth || 640;
-        const h = video.videoHeight || 480;
-        captureCanvas.width = w;
-        captureCanvas.height = h;
+            const ctx = captureCanvas.getContext('2d');
+            if (!ctx) throw new Error("The browser could not create a capture canvas.");
+            ctx.drawImage(video, 0, 0, w, h);
 
-        const ctx = captureCanvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, w, h);
-
-        // Send captured frame to AI Classifier Engine
-        const result = await classifyWasteItem(captureCanvas);
-        processClassificationResult(result);
-
-        isClassifying = false;
+            // Send captured frame to AI Classifier Engine
+            const result = await classifyWasteItem(captureCanvas);
+            processClassificationResult(result);
+        } catch (error) {
+            console.error("[INFERENCE ERROR] Frame classification failed:", error);
+            processClassificationResult({
+                success: false,
+                error: error.message || "Could not complete inference."
+            });
+        } finally {
+            isClassifying = false;
+        }
     }
 
     /**
@@ -499,23 +519,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Record to LocalStorage telemetry for Dashboard
-                if (lastConfirmedClass !== categoryKey || stabilityStreak === REQUIRED_CONSECUTIVE_FRAMES) {
-                    recordClassificationToStorage(categoryKey, res.confidence);
-                }
+                recordClassificationToStorage(categoryKey, res.confidence);
+                resetStabilityState();
             } else {
                 classificationStatusBadge.textContent = `ANALYZING (${stabilityStreak}/${REQUIRED_CONSECUTIVE_FRAMES})`;
                 classificationStatusBadge.className = "badge";
             }
         } else {
             // Low confidence -> reset streak
-            stabilityStreak = 0;
-            currentCandidateClass = null;
-            lastDispatchedClass = null;
-            stabilityText.textContent = `0 / ${REQUIRED_CONSECUTIVE_FRAMES} Frames`;
-            pips.forEach(pip => {
-                pip.classList.remove('active');
-                pip.style.backgroundColor = '';
-            });
+            resetStabilityState();
 
             classificationStatusBadge.textContent = "LOW CONFIDENCE";
             classificationStatusBadge.className = "badge badge-non-recyclable";
