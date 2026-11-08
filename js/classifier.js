@@ -56,12 +56,11 @@ async function classifyWasteItem(inputElement) {
     }
 
     try {
-        const prediction = tf.tidy(() => {
-            const tensor = tf.browser.fromPixels(inputElement)
-                .resizeBilinear([224, 224]).toFloat().div(127.5).sub(1).expandDims(0);
-            return customTfjsModel.predict(tensor);
-        });
+        const tensor = tf.browser.fromPixels(inputElement)
+            .resizeBilinear([224, 224]).toFloat().expandDims(0);
+        const prediction = customTfjsModel.predict(tensor);
         const values = Array.from(await prediction.data());
+        tensor.dispose();
         prediction.dispose();
         if (values.length !== MODEL_CLASS_KEYS.length) {
             throw new Error(`Expected 3 model probabilities, received ${values.length}.`);

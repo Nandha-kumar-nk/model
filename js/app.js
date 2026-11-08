@@ -619,23 +619,75 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadDropzone.classList.toggle('hidden');
         });
 
-        uploadDropzone.addEventListener('click', () => {
-            fileInput.click();
+        uploadDropzone.addEventListener('click', (event) => {
+            if (event.target !== fileInput) fileInput.click();
         });
 
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.onload = async () => {
-                        const result = await classifyWasteItem(img);
-                        processClassificationResult(result);
-                    };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
+        const decodeUploadedImage = async (file) => {
+            const maxFileSize = 20 * 1024 * 1024;
+            const acceptedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+            const extension = file.name.toLowerCase().split('.').pop();
+            const acceptedExtensions = new Set(['jpg', 'jpeg', 'png', 'webp']);
+            const hasAcceptedType = acceptedTypes.has(file.type) || acceptedExtensions.has(extension);
+            if (!hasAcceptedType || file.size > maxFileSize) {
+                throw new Error('Please select a JPG, JPEG, PNG, or WEBP image smaller than 20 MB.');
+            }
+
+            let source;
+            let objectUrl;
+            try {
+                if (typeof createImageBitmap === 'function') {
+                    try {
+                        source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+                    } catch (error) {
+                        console.warn('[UPLOAD] ImageBitmap decode with orientation failed; using Image fallback.', error);
+                    }
+                }
+                if (!source) {
+                    objectUrl = URL.createObjectURL(file);
+                    source = await new Promise((resolve, reject) => {
+                        const image = new Image();
+                        image.onload = () => resolve(image);
+                        image.onerror = () => reject(new Error('The selected image could not be decoded.'));
+                        image.src = objectUrl;
+                    });
+                }
+
+                if (!source.width || !source.height) {
+                    throw new Error('The selected image has no usable dimensions.');
+                }
+                const maxDimension = 2048;
+                const scale = Math.min(1, maxDimension / Math.max(source.width, source.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(source.width * scale));
+                canvas.height = Math.max(1, Math.round(source.height * scale));
+                const context = canvas.getContext('2d', { alpha: false });
+                if (!context) throw new Error('The browser could not create an image canvas.');
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(source, 0, 0, canvas.width, canvas.height);
+                return canvas;
+            } finally {
+                if (source && typeof source.close === 'function') source.close();
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+            }
+        };
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            fileInput.value = '';
+            if (!file) return;
+
+            try {
+                const imageCanvas = await decodeUploadedImage(file);
+                const result = await classifyWasteItem(imageCanvas);
+                processClassificationResult(result);
+            } catch (error) {
+                console.error('[UPLOAD ERROR]:', error);
+                processClassificationResult({
+                    success: false,
+                    error: error.message || 'The selected image could not be processed.'
+                });
             }
         });
     }
